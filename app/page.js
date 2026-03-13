@@ -53,6 +53,20 @@ export default function HomePage() {
     await load();
   }
 
+  async function reembedMemory(id) {
+    const res = await fetch('/api/reembed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.error || 'Re-embed failed');
+      return;
+    }
+    alert(`Re-embed requested using: ${data.method}`);
+  }
+
   async function search() {
     const res = await fetch('/api/search', {
       method: 'POST',
@@ -87,7 +101,7 @@ export default function HomePage() {
         <h3>Entries {loading ? '(loading...)' : `(${items.length})`}</h3>
         <div style={{ display: 'grid', gap: 10 }}>
           {items.map((m) => (
-            <MemoryCard key={m.id} item={m} onSave={updateMemory} onDelete={deleteMemory} />
+            <MemoryCard key={m.id} item={m} onSave={updateMemory} onDelete={deleteMemory} onReembed={reembedMemory} />
           ))}
         </div>
       </section>
@@ -95,7 +109,7 @@ export default function HomePage() {
   );
 }
 
-function MemoryCard({ item, onSave, onDelete }) {
+function MemoryCard({ item, onSave, onDelete, onReembed }) {
   const [draft, setDraft] = useState(item.content || '');
   return (
     <div style={{ border: '1px solid #2f3f7a', borderRadius: 10, padding: 10, background: '#0e1735' }}>
@@ -103,8 +117,9 @@ function MemoryCard({ item, onSave, onDelete }) {
         #{item.id} • {item.created_at || 'n/a'} • {item.category || 'uncategorized'} • importance {item.importance ?? 'n/a'}
       </div>
       <textarea style={{ ...input, width: '100%', minHeight: 80 }} value={draft} onChange={(e) => setDraft(e.target.value)} />
-      <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+      <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button style={btn} onClick={() => onSave(item.id, draft)}>Save</button>
+        <button style={{ ...btn, background: '#23585e', borderColor: '#39a0ab' }} onClick={() => onReembed(item.id)}>Re-embed</button>
         <button style={{ ...btn, background: '#5a5010', borderColor: '#bca92f' }} onClick={() => onDelete(item.id, false)}>Soft delete</button>
         <button style={{ ...btn, background: '#5f1821', borderColor: '#c9485d' }} onClick={() => onDelete(item.id, true)}>Hard delete</button>
       </div>

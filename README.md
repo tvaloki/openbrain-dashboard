@@ -7,6 +7,7 @@ Local dashboard for auditing and managing Open Brain memory entries in Supabase.
 - Add/Edit/Delete entries
 - Soft delete + hard delete
 - Semantic search (`match_memories` RPC if available)
+- Re-embed action per memory entry (tries common embedding RPC names)
 - Edit/audit history tables (`memory_versions`, `memory_audit_log`)
 
 ## 1) Setup
