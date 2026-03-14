@@ -1,4 +1,4 @@
-import { getAdminClient, tableName } from '@/lib/supabase';
+import { auditTableName, getAdminClient, tableName } from '@/lib/supabase';
 
 const CANDIDATE_RPCS = [
   'reembed_memory',
@@ -75,7 +75,7 @@ export async function POST(req) {
     for (const fn of CANDIDATE_RPCS) {
       const result = await tryRpc(supabase, fn, id);
       if (result.ok) {
-        await supabase.from('memory_audit_log').insert({
+        await supabase.from(auditTableName()).insert({
           memory_id: id,
           action: 'reembed',
           actor: 'local-user',
@@ -88,7 +88,7 @@ export async function POST(req) {
 
     const fallback = await directReembedFallback(supabase, id);
     if (fallback.ok) {
-      await supabase.from('memory_audit_log').insert({
+      await supabase.from(auditTableName()).insert({
         memory_id: id,
         action: 'reembed',
         actor: 'local-user',

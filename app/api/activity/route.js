@@ -1,4 +1,4 @@
-import { getAdminClient } from '@/lib/supabase';
+import { auditTableName, getAdminClient } from '@/lib/supabase';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 300;
@@ -16,7 +16,7 @@ export async function GET(req) {
     const limit = parseLimit(searchParams.get('limit'));
 
     const { data, error } = await supabase
-      .from('memory_audit_log')
+      .from(auditTableName())
       .select('id,memory_id,action,actor,meta,created_at')
       .order('created_at', { ascending: false })
       .limit(limit);

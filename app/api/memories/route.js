@@ -1,4 +1,4 @@
-import { getAdminClient, tableName } from '@/lib/supabase';
+import { auditTableName, getAdminClient, tableName, versionsTableName } from '@/lib/supabase';
 
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 500;
@@ -88,7 +88,7 @@ export async function POST(req) {
     const { data, error } = await supabase.from(tableName()).insert(row).select('*').single();
     if (error) throw error;
 
-    await supabase.from('memory_audit_log').insert({ memory_id: data.id, action: 'create', actor: 'local-user' });
+    await supabase.from(auditTableName()).insert({ memory_id: data.id, action: 'create', actor: 'local-user' });
 
     return Response.json({ item: data }, { status: 201 });
   } catch (e) {
@@ -118,8 +118,8 @@ export async function PATCH(req) {
         .single();
       if (error) throw error;
 
-      await supabase.from('memory_versions').insert({ memory_id: id, before_data: before, after_data: data, action: 'restore' });
-      await supabase.from('memory_audit_log').insert({ memory_id: id, action: 'restore', actor: 'local-user' });
+      await supabase.from(versionsTableName()).insert({ memory_id: id, before_data: before, after_data: data, action: 'restore' });
+      await supabase.from(auditTableName()).insert({ memory_id: id, action: 'restore', actor: 'local-user' });
 
       return Response.json({ item: data });
     }
@@ -148,8 +148,8 @@ export async function PATCH(req) {
     const { data, error } = await supabase.from(tableName()).update(patch).eq('id', id).select('*').single();
     if (error) throw error;
 
-    await supabase.from('memory_versions').insert({ memory_id: id, before_data: before, after_data: data, action: 'update' });
-    await supabase.from('memory_audit_log').insert({ memory_id: id, action: 'update', actor: 'local-user' });
+    await supabase.from(versionsTableName()).insert({ memory_id: id, before_data: before, after_data: data, action: 'update' });
+    await supabase.from(auditTableName()).insert({ memory_id: id, action: 'update', actor: 'local-user' });
 
     return Response.json({ item: data });
   } catch (e) {
@@ -168,7 +168,7 @@ export async function DELETE(req) {
     if (hard) {
       const { error } = await supabase.from(tableName()).delete().eq('id', validId);
       if (error) throw error;
-      await supabase.from('memory_audit_log').insert({ memory_id: validId, action: 'hard_delete', actor: 'local-user' });
+      await supabase.from(auditTableName()).insert({ memory_id: validId, action: 'hard_delete', actor: 'local-user' });
       return Response.json({ ok: true });
     }
 
@@ -177,7 +177,7 @@ export async function DELETE(req) {
       .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
       .eq('id', validId);
     if (error) throw error;
-    await supabase.from('memory_audit_log').insert({ memory_id: validId, action: 'soft_delete', actor: 'local-user' });
+    await supabase.from(auditTableName()).insert({ memory_id: validId, action: 'soft_delete', actor: 'local-user' });
     return Response.json({ ok: true });
   } catch (e) {
     return Response.json({ error: e.message }, { status: 500 });
