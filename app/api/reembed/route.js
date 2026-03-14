@@ -1,4 +1,4 @@
-import { auditTableName, getAdminClient, tableName } from '@/lib/supabase';
+import { auditTableName, fromTable, getAdminClient, tableName } from '@/lib/supabase';
 
 const CANDIDATE_RPCS = [
   'reembed_memory',
@@ -33,8 +33,7 @@ async function directReembedFallback(supabase, memoryId) {
   const now = new Date().toISOString();
 
   // Preferred: clear embedding and touch updated_at.
-  let attempt = await supabase
-    .from(memories)
+  let attempt = await fromTable(supabase, memories)
     .update({ embedding: null, updated_at: now })
     .eq('id', memoryId)
     .select('id')
@@ -42,8 +41,7 @@ async function directReembedFallback(supabase, memoryId) {
 
   if (attempt.error && isMissingEmbeddingColumnError(attempt.error)) {
     // Fallback: only touch updated_at when there is no embedding column.
-    attempt = await supabase
-      .from(memories)
+    attempt = await fromTable(supabase, memories)
       .update({ updated_at: now })
       .eq('id', memoryId)
       .select('id')
@@ -75,7 +73,7 @@ export async function POST(req) {
     for (const fn of CANDIDATE_RPCS) {
       const result = await tryRpc(supabase, fn, id);
       if (result.ok) {
-        await supabase.from(auditTableName()).insert({
+        await fromTable(supabase, auditTableName()).insert({
           memory_id: id,
           action: 'reembed',
           actor: 'local-user',
@@ -88,7 +86,7 @@ export async function POST(req) {
 
     const fallback = await directReembedFallback(supabase, id);
     if (fallback.ok) {
-      await supabase.from(auditTableName()).insert({
+      await fromTable(supabase, auditTableName()).insert({
         memory_id: id,
         action: 'reembed',
         actor: 'local-user',

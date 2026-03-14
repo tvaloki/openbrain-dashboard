@@ -1,4 +1,4 @@
-import { getAdminClient, tableName } from '@/lib/supabase';
+import { fromTable, getAdminClient, tableName } from '@/lib/supabase';
 
 function cleanText(value, max = 500) {
   if (typeof value !== 'string') return '';
@@ -23,8 +23,7 @@ export async function POST(req) {
       return Response.json({ items: filtered, mode: 'semantic' });
     }
 
-    let fallback = supabase
-      .from(tableName())
+    let fallback = fromTable(supabase, tableName())
       .select('*')
       .ilike('content', `%${q}%`)
       .order('created_at', { ascending: false })
