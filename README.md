@@ -28,7 +28,8 @@ Open: `http://localhost:3000`
 
 In Supabase SQL editor, run:
 
-`supabase/001_dashboard_support.sql`
+1. `supabase/001_dashboard_support.sql`
+2. `supabase/002_reembed_rpc.sql` (adds a default `reembed_memory(memory_id)` RPC used by the Re-embed button)
 
 ## 3) Notes
 - This app is designed for one trusted local user (you).
