@@ -1,6 +1,6 @@
 # OpenBrain Dashboard (single-user)
 
-Local dashboard for auditing and managing Open Brain memory entries in Supabase.
+Dashboard for auditing and managing Open Brain memory entries in Supabase.
 
 ## Features
 - View active or soft-deleted memory entries
@@ -17,7 +17,7 @@ Local dashboard for auditing and managing Open Brain memory entries in Supabase.
 
 ```bash
 cp .env.example .env.local
-# edit .env.local with your Supabase URL + service role key
+# edit .env.local with your non-local Supabase URL + service role key
 npm install
 npm run dev
 ```
@@ -32,10 +32,12 @@ In Supabase SQL editor, run:
 2. `supabase/002_reembed_rpc.sql` (optional but recommended: adds a default `reembed_memory(memory_id)` RPC used by the Re-embed button)
 
 ## 3) Notes
-- This app is designed for one trusted local user (you).
+- This app is designed for one trusted user.
+- Default write target is `public.thoughts` (override with `OPENBRAIN_MEMORIES_TABLE` if needed).
 - `OPENBRAIN_MEMORIES_TABLE` may be schema-qualified (for example: `openbrain.memories`).
 - Audit/version writes automatically use the same schema as your memories table (`memory_audit_log` + `memory_versions` in that schema), so visibility stays consistent with other Open Brain tables.
-- For local use, leaving `NEXT_PUBLIC_DASHBOARD_API_BASE_URL` empty uses same-origin `/api/*` routes.
+- The API now prefers `SUPABASE_NON_LOCAL_URL` + `SUPABASE_NON_LOCAL_SERVICE_ROLE_KEY` and rejects localhost Supabase URLs unless `SUPABASE_ALLOW_LOCAL=1` is set.
+- Leaving `NEXT_PUBLIC_DASHBOARD_API_BASE_URL` empty uses same-origin `/api/*` routes.
 - For hosted/non-local setups, set `NEXT_PUBLIC_DASHBOARD_API_BASE_URL` to your API origin so actions like Re-embed call the correct backend.
 - You can also override API origin at runtime from the dashboard **Connection** section (saved in `localStorage`), useful when testing against different remote backends without rebuilding.
 - Never commit `.env.local`.
