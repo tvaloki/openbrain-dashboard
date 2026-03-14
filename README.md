@@ -28,8 +28,9 @@ Open: `http://localhost:3000`
 
 In Supabase SQL editor, run:
 
-1. `supabase/001_dashboard_support.sql`
-2. `supabase/002_reembed_rpc.sql` (optional but recommended: adds a default `reembed_memory(memory_id)` RPC used by the Re-embed button)
+1. `supabase/001_dashboard_support.sql` (base dashboard support objects)
+2. `supabase/004_align_thoughts_schema.sql` (required for `public.thoughts`: aligns/backfills `content`, `created_at`, and dashboard fields)
+3. `supabase/002_reembed_rpc.sql` (optional but recommended: adds a default `reembed_memory(memory_id)` RPC used by the Re-embed button)
 
 ## 3) Notes
 - This app is designed for one trusted user.
@@ -41,6 +42,31 @@ In Supabase SQL editor, run:
 - For hosted/non-local setups, set `NEXT_PUBLIC_DASHBOARD_API_BASE_URL` to your API origin so actions like Re-embed call the correct backend.
 - You can also override API origin at runtime from the dashboard **Connection** section (saved in `localStorage`), useful when testing against different remote backends without rebuilding.
 - Never commit `.env.local`.
+
+## Troubleshooting
+
+### Error: `Could not find the 'category' column of 'thoughts' in the schema cache`
+
+Your Supabase `thoughts` table is missing dashboard-required columns.
+
+Run `supabase/001_dashboard_support.sql` in Supabase SQL Editor, then refresh the dashboard.
+
+This migration is idempotent (safe to run multiple times).
+
+### Error mentions missing `deleted_at` on `public.thoughts`
+
+Run:
+
+1. `supabase/001_dashboard_support.sql` (full dashboard schema)
+2. If you still see the same error, run `supabase/003_fix_deleted_at.sql` (targeted repair)
+
+Then refresh the dashboard. Both scripts are idempotent.
+
+### Errors about missing `content` or `created_at` on `public.thoughts`
+
+Run `supabase/004_align_thoughts_schema.sql`.
+
+This migration adds/backfills dashboard-required columns (`content`, `created_at`, `updated_at`, `deleted_at`, etc.) and is idempotent.
 
 ## 4) Optional semantic search RPC
 If your project already has a `match_memories(query_text, match_count)` RPC, the app uses it automatically.
