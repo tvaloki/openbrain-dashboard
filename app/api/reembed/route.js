@@ -1,4 +1,4 @@
-import { getAdminClient } from '@/lib/supabase';
+import { getAdminClient, tableName } from '@/lib/supabase';
 
 const CANDIDATE_RPCS = [
   'reembed_memory',
@@ -9,11 +9,7 @@ const CANDIDATE_RPCS = [
 ];
 
 async function tryRpc(supabase, fn, memoryId) {
-  const payloads = [
-    { memory_id: memoryId },
-    { id: memoryId },
-    { p_memory_id: memoryId }
-  ];
+  const payloads = [{ memory_id: memoryId }, { id: memoryId }, { p_memory_id: memoryId }];
 
   const failures = [];
 
@@ -24,6 +20,47 @@ async function tryRpc(supabase, fn, memoryId) {
   }
 
   return { ok: false, failures };
+}
+
+function isMissingEmbeddingColumnError(error) {
+  if (!error?.message) return false;
+  const m = error.message.toLowerCase();
+  return m.includes("column") && m.includes("embedding") && m.includes("does not exist");
+}
+
+async function directReembedFallback(supabase, memoryId) {
+  const memories = tableName();
+  const now = new Date().toISOString();
+
+  // Preferred: clear embedding and touch updated_at.
+  let attempt = await supabase
+    .from(memories)
+    .update({ embedding: null, updated_at: now })
+    .eq('id', memoryId)
+    .select('id')
+    .maybeSingle();
+
+  if (attempt.error && isMissingEmbeddingColumnError(attempt.error)) {
+    // Fallback: only touch updated_at when there is no embedding column.
+    attempt = await supabase
+      .from(memories)
+      .update({ updated_at: now })
+      .eq('id', memoryId)
+      .select('id')
+      .maybeSingle();
+
+    if (!attempt.error && attempt.data?.id != null) {
+      return { ok: true, method: 'direct_updated_at_touch' };
+    }
+  } else if (!attempt.error && attempt.data?.id != null) {
+    return { ok: true, method: 'direct_embedding_clear' };
+  }
+
+  if (!attempt.error && !attempt.data) {
+    return { ok: false, error: `Memory ${memoryId} not found` };
+  }
+
+  return { ok: false, error: attempt.error?.message || 'Direct fallback failed' };
 }
 
 export async function POST(req) {
@@ -49,11 +86,23 @@ export async function POST(req) {
       attempts.push(...(result.failures || []));
     }
 
+    const fallback = await directReembedFallback(supabase, id);
+    if (fallback.ok) {
+      await supabase.from('memory_audit_log').insert({
+        memory_id: id,
+        action: 'reembed',
+        actor: 'local-user',
+        meta: { method: fallback.method, source: 'rpc-fallback' }
+      });
+      return Response.json({ ok: true, method: fallback.method, fallback: true });
+    }
+
     return Response.json(
       {
         ok: false,
         error:
-          'No known re-embed RPC found. Create one of: reembed_memory, enqueue_memory_embedding, embed_memory, refresh_memory_embedding, reindex_memory.',
+          'No known re-embed RPC found, and direct fallback failed. Create one of: reembed_memory, enqueue_memory_embedding, embed_memory, refresh_memory_embedding, reindex_memory.',
+        direct_fallback_error: fallback.error,
         attempts
       },
       { status: 400 }

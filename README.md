@@ -8,7 +8,7 @@ Local dashboard for auditing and managing Open Brain memory entries in Supabase.
 - Add/Edit memories (content + category + source + importance)
 - Soft delete, restore, and hard delete
 - Semantic search (`match_memories` RPC if available), with keyword fallback
-- Re-embed action per memory entry (tries common embedding RPC names)
+- Re-embed action per memory entry (tries common embedding RPC names, then falls back to direct DB update if none exist)
 - Recent activity feed from `memory_audit_log`
 - Edit/audit history tables (`memory_versions`, `memory_audit_log`)
 - Basic server-side validation and safer API error handling
@@ -29,11 +29,13 @@ Open: `http://localhost:3000`
 In Supabase SQL editor, run:
 
 1. `supabase/001_dashboard_support.sql`
-2. `supabase/002_reembed_rpc.sql` (adds a default `reembed_memory(memory_id)` RPC used by the Re-embed button)
+2. `supabase/002_reembed_rpc.sql` (optional but recommended: adds a default `reembed_memory(memory_id)` RPC used by the Re-embed button)
 
 ## 3) Notes
 - This app is designed for one trusted local user (you).
-- Keep it on localhost.
+- For local use, leaving `NEXT_PUBLIC_DASHBOARD_API_BASE_URL` empty uses same-origin `/api/*` routes.
+- For hosted/non-local setups, set `NEXT_PUBLIC_DASHBOARD_API_BASE_URL` to your API origin so actions like Re-embed call the correct backend.
+- You can also override API origin at runtime from the dashboard **Connection** section (saved in `localStorage`), useful when testing against different remote backends without rebuilding.
 - Never commit `.env.local`.
 
 ## 4) Optional semantic search RPC

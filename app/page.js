@@ -14,6 +14,21 @@ const defaultFilters = {
   limit: 100
 };
 
+const ENV_API_BASE = (process.env.NEXT_PUBLIC_DASHBOARD_API_BASE_URL || '').trim().replace(/\/$/, '');
+const API_BASE_OVERRIDE_KEY = 'openbrain.dashboard.apiBaseOverride';
+
+function apiUrl(path, base = '') {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  if (!base) return normalizedPath;
+  return `${base}${normalizedPath}`;
+}
+
+function normalizeApiBaseInput(value = '') {
+  const next = value.trim();
+  if (!next) return '';
+  return next.replace(/\/$/, '');
+}
+
 export default function HomePage() {
   const [items, setItems] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -22,8 +37,11 @@ export default function HomePage() {
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [reembeddingIds, setReembeddingIds] = useState(() => new Set());
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
+  const [apiBaseOverride, setApiBaseOverride] = useState('');
+  const [apiBaseInput, setApiBaseInput] = useState('');
 
   async function requestJson(url, init) {
     const res = await fetch(url, init);
@@ -39,6 +57,15 @@ export default function HomePage() {
     setError(nextError);
   }
 
+  useEffect(() => {
+    const stored = typeof window !== 'undefined' ? window.localStorage.getItem(API_BASE_OVERRIDE_KEY) || '' : '';
+    const normalized = normalizeApiBaseInput(stored);
+    setApiBaseOverride(normalized);
+    setApiBaseInput(normalized || ENV_API_BASE);
+  }, []);
+
+  const apiBase = useMemo(() => normalizeApiBaseInput(apiBaseOverride || ENV_API_BASE), [apiBaseOverride]);
+
   async function load() {
     setLoading(true);
     setMessage('Loading memories...', '');
@@ -52,8 +79,8 @@ export default function HomePage() {
       if (filters.q) params.set('q', filters.q);
 
       const [memoryData, activityData] = await Promise.all([
-        requestJson(`/api/memories?${params.toString()}`),
-        requestJson('/api/activity?limit=40')
+        requestJson(apiUrl(`/api/memories?${params.toString()}`, apiBase)),
+        requestJson(apiUrl('/api/activity?limit=40', apiBase))
       ]);
 
       setItems(memoryData.items || []);
@@ -69,7 +96,7 @@ export default function HomePage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [apiBase]);
 
   async function runAction(task, successMessage) {
     setBusy(true);
@@ -96,7 +123,7 @@ export default function HomePage() {
 
     await runAction(
       () =>
-        requestJson('/api/memories', {
+        requestJson(apiUrl('/api/memories', apiBase), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -110,7 +137,7 @@ export default function HomePage() {
   async function updateMemory(id, patch) {
     await runAction(
       () =>
-        requestJson('/api/memories', {
+        requestJson(apiUrl('/api/memories', apiBase), {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, ...patch })
@@ -122,7 +149,7 @@ export default function HomePage() {
   async function restoreMemory(id) {
     await runAction(
       () =>
-        requestJson('/api/memories', {
+        requestJson(apiUrl('/api/memories', apiBase), {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, action: 'restore' })
@@ -137,7 +164,7 @@ export default function HomePage() {
 
     await runAction(
       () =>
-        requestJson('/api/memories', {
+        requestJson(apiUrl('/api/memories', apiBase), {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, hard })
@@ -147,17 +174,33 @@ export default function HomePage() {
   }
 
   async function reembedMemory(id) {
-    await runAction(
-      async () => {
-        const data = await requestJson('/api/reembed', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id })
-        });
-        setMessage(`Re-embed requested via ${data.method}.`, '');
-      },
-      ''
-    );
+    setReembeddingIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+    setMessage(`Re-embedding #${id}...`, '');
+
+    try {
+      const data = await requestJson(apiUrl('/api/reembed', apiBase), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+
+      await load();
+
+      const mode = data.fallback ? `fallback (${data.method})` : data.method;
+      setMessage(`Memory #${id} re-embed requested via ${mode}.`, '');
+    } catch (e) {
+      setMessage('', e.message);
+    } finally {
+      setReembeddingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
   }
 
   async function semanticSearch() {
@@ -169,7 +212,7 @@ export default function HomePage() {
     setLoading(true);
     setMessage('Searching...', '');
     try {
-      const data = await requestJson('/api/search', {
+      const data = await requestJson(apiUrl('/api/search', apiBase), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: searchQuery, include_deleted: filters.includeDeleted || filters.onlyDeleted })
@@ -183,6 +226,32 @@ export default function HomePage() {
     }
   }
 
+  function saveApiBase() {
+    const normalized = normalizeApiBaseInput(apiBaseInput);
+    if (!normalized) {
+      if (typeof window !== 'undefined') window.localStorage.removeItem(API_BASE_OVERRIDE_KEY);
+      setApiBaseOverride('');
+      setMessage('API base reset to environment/default.', '');
+      return;
+    }
+
+    if (!/^https?:\/\//i.test(normalized)) {
+      setMessage('', 'API base must be an absolute http(s) URL, or left blank for same-origin.');
+      return;
+    }
+
+    if (typeof window !== 'undefined') window.localStorage.setItem(API_BASE_OVERRIDE_KEY, normalized);
+    setApiBaseOverride(normalized);
+    setMessage(`API base set to ${normalized}`, '');
+  }
+
+  function clearApiBaseOverride() {
+    if (typeof window !== 'undefined') window.localStorage.removeItem(API_BASE_OVERRIDE_KEY);
+    setApiBaseOverride('');
+    setApiBaseInput(ENV_API_BASE);
+    setMessage('API base override cleared.', '');
+  }
+
   const summary = useMemo(() => {
     const total = items.length;
     const deleted = items.filter((x) => x.deleted_at).length;
@@ -192,10 +261,31 @@ export default function HomePage() {
   return (
     <main>
       <h1 style={{ marginTop: 0 }}>Open Brain Dashboard</h1>
-      <p style={{ color: '#9fb2ff' }}>Local single-user CRUD + audit for your memory table.</p>
+      <p style={{ color: '#9fb2ff' }}>Single-user CRUD + audit for your memory table.</p>
 
       {status ? <p style={{ color: '#86efac', marginTop: 0 }}>{status}</p> : null}
       {error ? <p style={{ color: '#fca5a5', marginTop: 0 }}>{error}</p> : null}
+
+      <section style={box}>
+        <h3 style={{ marginTop: 0 }}>Connection</h3>
+        <p style={{ color: '#9fb2ff', marginTop: 0 }}>
+          API target: <code>{apiBase || '(same-origin)'}</code>
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <input
+            style={{ ...input, flex: 1, minWidth: 300 }}
+            value={apiBaseInput}
+            onChange={(e) => setApiBaseInput(e.target.value)}
+            placeholder="https://api.example.com (leave blank for same-origin)"
+          />
+          <button style={btn} disabled={loading || busy} onClick={saveApiBase}>
+            Save API base
+          </button>
+          <button style={btn} disabled={loading || busy} onClick={clearApiBaseOverride}>
+            Clear override
+          </button>
+        </div>
+      </section>
 
       <section style={box}>
         <h3 style={{ marginTop: 0 }}>Quick stats</h3>
@@ -335,6 +425,7 @@ export default function HomePage() {
               onDelete={deleteMemory}
               onReembed={reembedMemory}
               onRestore={restoreMemory}
+              isReembedding={reembeddingIds.has(m.id)}
             />
           ))}
         </div>
@@ -355,7 +446,7 @@ export default function HomePage() {
   );
 }
 
-function MemoryCard({ item, disabled, onSave, onDelete, onReembed, onRestore }) {
+function MemoryCard({ item, disabled, onSave, onDelete, onReembed, onRestore, isReembedding = false }) {
   const [draft, setDraft] = useState(item.content || '');
   const [category, setCategory] = useState(item.category || 'manual');
   const [source, setSource] = useState(item.source || 'dashboard');
@@ -396,8 +487,12 @@ function MemoryCard({ item, disabled, onSave, onDelete, onReembed, onRestore }) 
         >
           Save
         </button>
-        <button style={{ ...btn, background: '#23585e', borderColor: '#39a0ab' }} disabled={disabled} onClick={() => onReembed(item.id)}>
-          Re-embed
+        <button
+          style={{ ...btn, background: '#23585e', borderColor: '#39a0ab' }}
+          disabled={disabled || isReembedding}
+          onClick={() => onReembed(item.id)}
+        >
+          {isReembedding ? 'Re-embedding…' : 'Re-embed'}
         </button>
         {deleted ? (
           <button style={{ ...btn, background: '#2c5a15', borderColor: '#7ccf4a' }} disabled={disabled} onClick={() => onRestore(item.id)}>
