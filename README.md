@@ -33,7 +33,7 @@ In Supabase SQL editor, run:
 
 ## 3) Notes
 - This app is designed for one trusted user.
-- Default write target is `public.thoughts` (override with `OPENBRAIN_MEMORIES_TABLE` if needed).
+- Default write target is `memories` (override with `OPENBRAIN_MEMORIES_TABLE` if needed).
 - `OPENBRAIN_MEMORIES_TABLE` may be schema-qualified (for example: `openbrain.memories`).
 - Audit/version writes automatically use the same schema as your memories table (`memory_audit_log` + `memory_versions` in that schema), so visibility stays consistent with other Open Brain tables.
 - The API now prefers `SUPABASE_NON_LOCAL_URL` + `SUPABASE_NON_LOCAL_SERVICE_ROLE_KEY` and rejects localhost Supabase URLs unless `SUPABASE_ALLOW_LOCAL=1` is set.
